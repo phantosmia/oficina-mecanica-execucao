@@ -1,0 +1,87 @@
+# Credenciais AWS: nenhuma chave no manifesto. No AWS Academy Lab os pods
+# herdam a role dos nodes do EKS (LabRole) via IMDSv2.
+apiVersion: v1
+kind: Service
+metadata:
+  name: execucao-api
+  namespace: oficina-execucao
+  labels:
+    app.kubernetes.io/name: execucao-api
+    app.kubernetes.io/part-of: oficina-mecanica
+spec:
+  ports:
+    - name: http
+      port: 8000
+      targetPort: http
+  selector:
+    app.kubernetes.io/name: execucao-api
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: execucao-api
+  namespace: oficina-execucao
+  labels:
+    app.kubernetes.io/name: execucao-api
+    app.kubernetes.io/part-of: oficina-mecanica
+spec:
+  replicas: 2
+  revisionHistoryLimit: 3
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: execucao-api
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxUnavailable: 0
+      maxSurge: 1
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: execucao-api
+        app.kubernetes.io/part-of: oficina-mecanica
+    spec:
+      containers:
+        - name: api
+          image: oficina-mecanica-execucao:latest
+          imagePullPolicy: Always
+          ports:
+            - name: http
+              containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: execucao-config
+            - secretRef:
+                name: execucao-secret
+          startupProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 5
+            failureThreshold: 24
+          readinessProbe:
+            httpGet:
+              path: /ready
+              port: http
+            periodSeconds: 10
+            timeoutSeconds: 3
+            failureThreshold: 3
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: http
+            periodSeconds: 30
+            timeoutSeconds: 3
+            failureThreshold: 3
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 100m
+              memory: 192Mi
+            limits:
+              cpu: 500m
+              memory: 384Mi

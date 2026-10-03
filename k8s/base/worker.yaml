@@ -1,0 +1,49 @@
+# Worker: consome a fila de comandos da saga (EnfileirarDiagnostico,
+# EnfileirarReparo). Idempotente, então pode ter mais réplicas com segurança.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: execucao-worker
+  namespace: oficina-execucao
+  labels:
+    app.kubernetes.io/name: execucao-worker
+    app.kubernetes.io/part-of: oficina-mecanica
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    type: RollingUpdate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: execucao-worker
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: execucao-worker
+        app.kubernetes.io/part-of: oficina-mecanica
+    spec:
+      containers:
+        - name: worker
+          image: oficina-mecanica-execucao:latest
+          imagePullPolicy: Always
+          args: ["worker"]
+          envFrom:
+            - configMapRef:
+                name: execucao-config
+            - secretRef:
+                name: execucao-secret
+          env:
+            - name: NEW_RELIC_APP_NAME
+              value: oficina-mecanica-execucao-worker
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi

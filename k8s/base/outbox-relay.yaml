@@ -1,0 +1,50 @@
+# Relay da outbox: publica no SNS as respostas do worker e os eventos das
+# ações do mecânico (README, "DynamoDB"). Uma réplica só, sem HPA: várias réplicas
+# só gerariam publicações duplicadas.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: execucao-outbox-relay
+  namespace: oficina-execucao
+  labels:
+    app.kubernetes.io/name: execucao-outbox-relay
+    app.kubernetes.io/part-of: oficina-mecanica
+spec:
+  replicas: 1
+  revisionHistoryLimit: 3
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: execucao-outbox-relay
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: execucao-outbox-relay
+        app.kubernetes.io/part-of: oficina-mecanica
+    spec:
+      containers:
+        - name: relay
+          image: oficina-mecanica-execucao:latest
+          imagePullPolicy: Always
+          args: ["relay"]
+          envFrom:
+            - configMapRef:
+                name: execucao-config
+            - secretRef:
+                name: execucao-secret
+          env:
+            - name: NEW_RELIC_APP_NAME
+              value: oficina-mecanica-execucao-outbox-relay
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - ALL
+          resources:
+            requests:
+              cpu: 50m
+              memory: 128Mi
+            limits:
+              cpu: 200m
+              memory: 256Mi

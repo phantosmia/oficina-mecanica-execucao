@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Testes automatizados
+    runs-on: ubuntu-latest
+    env:
+      PYTHONPATH: ${{ github.workspace }}
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Instalar Poetry
+        uses: snok/install-poetry@v1
+        with:
+          version: 2.2.1
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+
+      - name: Restaurar cache do ambiente virtual
+        uses: actions/cache@v4
+        with:
+          path: .venv
+          key: ${{ runner.os }}-python-3.12-poetry-${{ hashFiles('poetry.lock') }}
+
+      - name: Instalar dependências
+        run: poetry install --with dev
+
+      - name: Executar testes com cobertura (mínimo 80%)
+        # DynamoDB, SQS e SNS simulados pelo moto; Catálogo substituído por fake: sem Docker nem AWS.
+        run: poetry run pytest
+
+      - name: Publicar relatório de cobertura
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-xml
+          path: coverage.xml
+
+  build:
+    name: Build da imagem
+    runs-on: ubuntu-latest
+    needs: tests
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Construir imagem Docker
+        run: docker build -t oficina-mecanica-execucao:ci .
+
+  kubernetes:
+    name: Validar manifests Kubernetes
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Renderizar overlay aws-academy
+        run: kubectl kustomize k8s/overlays/aws-academy > /dev/null
