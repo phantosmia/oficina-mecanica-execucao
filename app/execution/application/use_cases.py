@@ -90,7 +90,7 @@ class CompleteDiagnosisUseCase:
 
 def diagnosis_payload(diagnosis: Diagnosis) -> dict:
     """Payload do `DiagnosticoConcluido`: o que a saga usa para reservar as
-    peças (Estoque) e gerar o orçamento (Orçamento & Pagamento)."""
+    peças (Estoque) e gerar o orçamento (Orçamento)."""
 
     def items(entries: list[DiagnosedItem], key: str) -> list[dict]:
         return [

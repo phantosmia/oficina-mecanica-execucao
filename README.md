@@ -37,7 +37,7 @@ stateDiagram-v2
     finalizada --> [*]
 ```
 
-Entre `diagnostico_concluido` e `aguardando_reparo` a OS está fora daqui: o orquestrador reserva as peças (Estoque), gera o orçamento, espera a aprovação e o pagamento (Orçamento & Pagamento). Se a saga for compensada nesse meio, a OS simplesmente nunca recebe o `EnfileirarReparo`.
+Entre `diagnostico_concluido` e `aguardando_reparo` a OS está fora daqui: o orquestrador reserva as peças (Estoque), gera o orçamento e espera a aprovação (Orçamento), depois cobra e espera o pagamento (Pagamento). Se a saga for compensada nesse meio, a OS simplesmente nunca recebe o `EnfileirarReparo`.
 
 ### Mensagens
 
