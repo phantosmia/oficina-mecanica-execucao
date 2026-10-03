@@ -1,0 +1,10 @@
+.venv
+.git
+.pytest_cache
+.coverage
+coverage.xml
+htmlcov
+**/__pycache__
+tests
+k8s
+infra

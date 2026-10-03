@@ -1,0 +1,9 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: execucao-config
+  namespace: oficina-execucao
+data:
+  EXECUCAO_TABLE_NAME: REPLACE_WITH_TABLE_NAME
+  EXECUCAO_EVENTS_TOPIC_ARN: REPLACE_WITH_EVENTS_TOPIC_ARN
+  EXECUCAO_COMMANDS_QUEUE_URL: REPLACE_WITH_COMMANDS_QUEUE_URL

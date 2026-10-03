@@ -1,0 +1,39 @@
+[tool.poetry]
+name = "oficina-mecanica-execucao"
+version = "0.1.0"
+description = "Microsserviço de Execução (fila de diagnóstico e reparo, DynamoDB, participante da saga) da oficina mecânica - Tech Challenge FIAP Fase 4"
+authors = []
+readme = "README.md"
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.12"
+fastapi = "^0.115.12"
+uvicorn = { version = "^0.34.2", extras = ["standard"] }
+python-jose = { version = "^3.5.0", extras = ["cryptography"] }
+boto3 = "^1.38.0"
+newrelic = "^13.5.0"
+httpx = "^0.28.1"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3.5"
+pytest-cov = "^6.1.1"
+moto = { version = "^5.1.0", extras = ["dynamodb", "sns", "sqs"] }
+bandit = "^1.8.3"
+pip-audit = "^2.9.0"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "--cov=app --cov=scripts --cov-report=term-missing --cov-report=xml"
+
+[tool.coverage.report]
+fail_under = 80
+skip_covered = true
+
+[tool.bandit]
+exclude_dirs = ["tests", ".venv"]
+skips = ["B101"]
+
+[build-system]
+requires = ["poetry-core>=2.0.0,<3.0.0"]
+build-backend = "poetry.core.masonry.api"
