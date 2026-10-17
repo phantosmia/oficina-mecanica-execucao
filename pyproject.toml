@@ -24,7 +24,14 @@ pip-audit = "^2.9.0"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-addopts = "--cov=app --cov=scripts --cov-report=term-missing --cov-report=xml"
+addopts = "--cov --cov-report=term-missing --cov-report=xml"
+
+[tool.coverage.run]
+# Raiz como único source, para o coverage.xml ter caminhos como app/... e
+# scripts/...: com um source por pasta, o SonarCloud não distingue os
+# __init__.py das duas. O omit deixa de fora o que não é código do serviço.
+source = ["."]
+omit = ["tests/*", ".venv/*"]
 
 [tool.coverage.report]
 fail_under = 80
