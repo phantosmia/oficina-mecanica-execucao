@@ -1,5 +1,7 @@
 # oficina-mecanica-execucao
 
+[![Quality Gate](https://sonarcloud.io/api/project_badges/measure?project=phantosmia_oficina-mecanica-execucao&metric=alert_status)](https://sonarcloud.io/summary/overall?id=phantosmia_oficina-mecanica-execucao) [![Cobertura](https://sonarcloud.io/api/project_badges/measure?project=phantosmia_oficina-mecanica-execucao&metric=coverage)](https://sonarcloud.io/component_measures?id=phantosmia_oficina-mecanica-execucao&metric=coverage)
+
 Microsserviço de **Execução** do sistema da oficina mecânica (Tech Challenge FIAP, Fase 4): gerencia a **fila de diagnóstico e de reparo** das ordens de serviço. O mecânico conduz cada etapa por aqui: é no diagnóstico que ele define quais serviços e peças a OS precisa, e isso vira o orçamento ([ADR-0010](https://github.com/phantosmia/oficina-mecanica-fiap/blob/main/docs/adrs/0010-diagnostico-define-o-orcamento.md)).
 
 É um dos 5 microsserviços do sistema. A divisão, a saga e o contrato entre os serviços estão documentados no repositório principal, [oficina-mecanica-fiap](https://github.com/phantosmia/oficina-mecanica-fiap):

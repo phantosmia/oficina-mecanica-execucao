@@ -21,6 +21,9 @@ jobs:
     steps:
       - name: Checkout do código
         uses: actions/checkout@v4
+        with:
+          # Histórico completo: o SonarCloud usa o blame para separar o código novo.
+          fetch-depth: 0
 
       - name: Configurar Python 3.12
         uses: actions/setup-python@v5
@@ -46,6 +49,12 @@ jobs:
       - name: Executar testes com cobertura (mínimo 80%)
         # DynamoDB, SQS e SNS simulados pelo moto; Catálogo substituído por fake: sem Docker nem AWS.
         run: poetry run pytest
+
+      - name: Análise do SonarCloud
+        # Configuração em sonar-project.properties; usa o coverage.xml do passo anterior.
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
 
       - name: Publicar relatório de cobertura
         uses: actions/upload-artifact@v4
