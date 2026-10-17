@@ -236,3 +236,9 @@ coverage.xml
 # Credenciais locais
 .env
 *credentials*
+
+# Terraform
+infra/.terraform/
+infra/tfplan
+*.tfstate
+*.tfstate.*

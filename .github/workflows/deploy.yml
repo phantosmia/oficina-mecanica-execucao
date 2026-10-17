@@ -1,0 +1,149 @@
+name: Deploy AWS/EKS
+
+# Provisiona a infraestrutura do serviço (infra/, Terraform) e implanta no EKS.
+# Roda no push nas branches de ambiente e pode ser disparado manualmente na
+# branch do ambiente (por exemplo, depois de o AWS Academy Lab ser resetado).
+# Ordem entre os repositórios: docs/arquitetura.md do oficina-mecanica-fiap.
+on:
+  push:
+    branches:
+      - homologacao
+      - producao
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  AWS_REGION: ${{ vars.AWS_REGION || 'us-east-1' }}
+  ENVIRONMENT: ${{ github.ref_name }}
+  IMAGE_TAG: ${{ github.sha }}
+  TF_STATE_BUCKET: ${{ vars.TF_STATE_BUCKET }}
+  TF_STATE_REGION: ${{ vars.TF_STATE_REGION || vars.AWS_REGION || 'us-east-1' }}
+  TF_LOCK_TABLE: ${{ vars.TF_LOCK_TABLE }}
+
+jobs:
+  deploy:
+    name: Deploy (${{ github.ref_name }})
+    runs-on: ubuntu-latest
+    environment: ${{ github.ref_name }}
+
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar credenciais AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-session-token: ${{ secrets.AWS_SESSION_TOKEN }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Configurar Terraform
+        uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+
+      - name: Configurar kubectl
+        uses: azure/setup-kubectl@v4
+
+      - name: Terraform init
+        working-directory: infra
+        run: |
+          if [ -z "${TF_STATE_BUCKET}" ] || [ -z "${TF_LOCK_TABLE}" ]; then
+            echo "Configure as variables TF_STATE_BUCKET e TF_LOCK_TABLE do repositório." >&2
+            exit 1
+          fi
+          terraform init \
+            -backend-config="bucket=${TF_STATE_BUCKET}" \
+            -backend-config="key=execucao/${ENVIRONMENT}/terraform.tfstate" \
+            -backend-config="region=${TF_STATE_REGION}" \
+            -backend-config="dynamodb_table=${TF_LOCK_TABLE}" \
+            -backend-config="encrypt=true"
+
+      - name: Terraform plan
+        working-directory: infra
+        run: |
+          terraform plan -out=tfplan \
+            -var="environment=${ENVIRONMENT}" \
+            -var="tf_state_bucket=${TF_STATE_BUCKET}" \
+            -var="tf_state_region=${TF_STATE_REGION}"
+
+      - name: Terraform apply
+        working-directory: infra
+        run: terraform apply -auto-approve tfplan
+
+      - name: Ler outputs do Terraform
+        id: tf
+        working-directory: infra
+        run: |
+          terraform output -json > "${RUNNER_TEMP}/outputs.json"
+          python3 - <<'PY'
+          import json
+          import os
+
+          with open(os.environ["RUNNER_TEMP"] + "/outputs.json", encoding="utf-8") as file:
+              outputs = json.load(file)
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as github_output:
+              for key in ["cluster_name", "ecr_repository_url", "commands_queue_url", "events_topic_arn", "table_name"]:
+                  github_output.write(f"{key}={outputs[key]['value']}\n")
+          PY
+
+      - name: Build e push da imagem
+        run: |
+          REPOSITORY="${{ steps.tf.outputs.ecr_repository_url }}"
+          aws ecr get-login-password --region "${AWS_REGION}" \
+            | docker login --username AWS --password-stdin "${REPOSITORY%%/*}"
+          docker build -t "${REPOSITORY}:${IMAGE_TAG}" .
+          docker push "${REPOSITORY}:${IMAGE_TAG}"
+
+      - name: Configurar kubeconfig do EKS
+        run: aws eks update-kubeconfig --region "${AWS_REGION}" --name "${{ steps.tf.outputs.cluster_name }}"
+
+      - name: Preparar overlay aws-academy
+        run: |
+          sed -i \
+            -e "s|^  EXECUCAO_TABLE_NAME: .*|  EXECUCAO_TABLE_NAME: ${{ steps.tf.outputs.table_name }}|" \
+            -e "s|^  EXECUCAO_EVENTS_TOPIC_ARN: .*|  EXECUCAO_EVENTS_TOPIC_ARN: ${{ steps.tf.outputs.events_topic_arn }}|" \
+            -e "s|^  EXECUCAO_COMMANDS_QUEUE_URL: .*|  EXECUCAO_COMMANDS_QUEUE_URL: ${{ steps.tf.outputs.commands_queue_url }}|" \
+            k8s/overlays/aws-academy/patch-configmap.yaml
+          sed -i \
+            -e "s|newName: .*|newName: ${{ steps.tf.outputs.ecr_repository_url }}|" \
+            -e "s|newTag: .*|newTag: ${IMAGE_TAG}|" \
+            k8s/overlays/aws-academy/kustomization.yaml
+          kubectl kustomize k8s/overlays/aws-academy > /dev/null
+
+      - name: Criar Secret Kubernetes
+        # O secret.yaml da base (valores de desenvolvimento) é removido no overlay
+        # aws-academy; os valores reais vêm daqui: secrets do GitHub e outputs do
+        # Terraform. JWT_SECRET_KEY precisa ser igual nos 6 serviços.
+        env:
+          JWT_SECRET_KEY: ${{ secrets.JWT_SECRET_KEY || 'change-me-in-production' }}
+          NEW_RELIC_LICENSE_KEY: ${{ secrets.NEW_RELIC_LICENSE_KEY }}
+        run: |
+          kubectl apply -f k8s/base/namespace.yaml
+          kubectl create secret generic execucao-secret -n oficina-execucao \
+            --from-literal=JWT_SECRET_KEY="${JWT_SECRET_KEY}" \
+            --from-literal=NEW_RELIC_LICENSE_KEY="${NEW_RELIC_LICENSE_KEY}" \
+            --dry-run=client -o yaml | kubectl apply -f -
+
+      - name: Aplicar manifests no EKS
+        run: |
+          kubectl apply -k k8s/overlays/aws-academy
+
+      - name: Aguardar rollout
+        run: |
+          kubectl rollout status deployment/execucao-api -n oficina-execucao --timeout=10m
+          kubectl rollout status deployment/execucao-worker -n oficina-execucao --timeout=10m
+          kubectl rollout status deployment/execucao-outbox-relay -n oficina-execucao --timeout=10m
+
+      - name: Resumo do deploy
+        run: |
+          echo "Ambiente: ${ENVIRONMENT}"
+          echo "Imagem: ${{ steps.tf.outputs.ecr_repository_url }}:${IMAGE_TAG}"
+          kubectl get deployments,services,hpa -n oficina-execucao
