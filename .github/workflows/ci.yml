@@ -85,3 +85,21 @@ jobs:
 
       - name: Renderizar overlay aws-academy
         run: kubectl kustomize k8s/overlays/aws-academy > /dev/null
+
+  terraform:
+    name: Validar Terraform
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout do código
+        uses: actions/checkout@v4
+
+      - name: Configurar Terraform
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Verificar formatação
+        run: terraform -chdir=infra fmt -check -recursive
+
+      - name: Validar configuração
+        run: |
+          terraform -chdir=infra init -backend=false -input=false
+          terraform -chdir=infra validate

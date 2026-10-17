@@ -6,6 +6,7 @@ kind: Kustomization
 resources:
   - ../../base
 patches:
+  - path: patch-delete-base-secret.yaml
   - path: patch-configmap.yaml
 images:
   - name: oficina-mecanica-execucao
