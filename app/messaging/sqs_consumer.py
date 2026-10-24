@@ -6,6 +6,7 @@ import boto3
 
 from app.messaging.dispatcher import Dispatcher, parse_body
 from app.shared.settings import settings
+from app.shared.logging_config import saga_log_context
 from app.shared.tracing import consume_trace
 
 logger = logging.getLogger(__name__)
@@ -58,7 +59,8 @@ class SqsConsumer:
         except (json.JSONDecodeError, KeyError, TypeError):
             logger.error("mensagem malformada mantida na fila (irá para a DLQ) message_id_sqs=%s", message.get("MessageId"))
             return False
-        with consume_trace(f"sqs/{envelope.type}", attributes):
+        correlation = {"saga_id": envelope.saga_id, "order_id": envelope.order_id}
+        with consume_trace(f"sqs/{envelope.type}", attributes, correlation), saga_log_context(**correlation):
             try:
                 self._dispatcher.handle(envelope)
             except Exception:

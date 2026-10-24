@@ -16,6 +16,11 @@ os traces da APM (ADR-0007). A abordagem aqui tem duas partes:
    além de `trace.id`/`span.id` do New Relic quando o agente estiver ativo
    (`newrelic.agent.get_linking_metadata()`) — é opcional e não falha se o
    agente não estiver rodando (dev local, testes).
+
+Fora de uma requisição HTTP (worker e relay da saga), a correlação é pela
+saga: `saga_log_context` guarda `saga_id`/`order_id` da mensagem em
+processamento e o `JSONFormatter` os inclui em cada linha, para filtrar
+todos os logs de uma OS de ponta a ponta, nos 6 serviços.
 """
 
 from __future__ import annotations
@@ -24,6 +29,8 @@ import contextvars
 import json
 import logging
 import uuid
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime, timezone
 from typing import Awaitable, Callable
 
@@ -39,6 +46,20 @@ _request_id: contextvars.ContextVar[str | None] = contextvars.ContextVar("reques
 def get_request_id() -> str | None:
     """ID da requisição em andamento no contexto assíncrono atual, se houver."""
     return _request_id.get()
+
+
+_saga_context: contextvars.ContextVar[dict[str, str] | None] = contextvars.ContextVar("saga_context", default=None)
+
+
+@contextmanager
+def saga_log_context(saga_id: str | None = None, order_id: int | str | None = None) -> Iterator[None]:
+    """Inclui `saga_id`/`order_id` em todo log emitido dentro do bloco."""
+    context = {key: str(value) for key, value in (("saga_id", saga_id), ("order_id", order_id)) if value is not None}
+    token = _saga_context.set(context)
+    try:
+        yield
+    finally:
+        _saga_context.reset(token)
 
 
 _access_logger = logging.getLogger("app.request")
@@ -83,6 +104,8 @@ class RequestIDMiddleware(BaseHTTPMiddleware):
 class _RequestIDFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         record.request_id = get_request_id()  # type: ignore[attr-defined]
+        for key, value in (_saga_context.get() or {}).items():
+            setattr(record, key, value)
         return True
 
 
@@ -100,6 +123,10 @@ class JSONFormatter(logging.Formatter):
         request_id = getattr(record, "request_id", None)
         if request_id:
             payload["request_id"] = request_id
+        for key in ("saga_id", "order_id"):
+            value = getattr(record, key, None)
+            if value is not None:
+                payload[key] = value
 
         linking_metadata = _new_relic_linking_metadata()
         if linking_metadata.get("trace.id"):

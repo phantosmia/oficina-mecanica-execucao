@@ -18,6 +18,7 @@ from typing import Any, Protocol
 
 from app.shared.dynamodb import query_gsi1
 from app.shared.events import Envelope
+from app.shared.logging_config import saga_log_context
 from app.shared.tracing import current_trace_headers
 
 OUTBOX_PARTITION = "OUTBOX"
@@ -53,8 +54,9 @@ class OutboxRelay:
         published = 0
         for item in query_gsi1(self._table, OUTBOX_PARTITION):
             envelope = json.loads(item["envelope"])
-            self._publisher.publish(envelope, dict(item.get("trace_headers") or {}))
-            self._table.delete_item(Key={"pk": item["pk"]})
-            logger.info("evento publicado type=%s message_id=%s", envelope["type"], envelope["message_id"])
+            with saga_log_context(envelope.get("saga_id"), envelope.get("order_id")):
+                self._publisher.publish(envelope, dict(item.get("trace_headers") or {}))
+                self._table.delete_item(Key={"pk": item["pk"]})
+                logger.info("evento publicado type=%s message_id=%s", envelope["type"], envelope["message_id"])
             published += 1
         return published
