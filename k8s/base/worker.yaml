@@ -35,6 +35,11 @@ spec:
           env:
             - name: NEW_RELIC_APP_NAME
               value: oficina-mecanica-execucao-worker
+            # Sem isso o agente New Relic descarta a primeira transação do processo
+            # (a que dispara o registro da aplicação): num worker recém-iniciado,
+            # é justamente a primeira mensagem da saga. Espera até 10 s pelo registro.
+            - name: NEW_RELIC_STARTUP_TIMEOUT
+              value: "10"
           securityContext:
             allowPrivilegeEscalation: false
             capabilities:
