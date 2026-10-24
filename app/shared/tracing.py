@@ -25,10 +25,14 @@ def current_trace_headers() -> dict[str, str]:
 
 
 @contextmanager
-def consume_trace(name: str, message_attributes: dict[str, str]) -> Iterator[None]:
+def consume_trace(
+    name: str, message_attributes: dict[str, str], custom_attributes: dict[str, object] | None = None
+) -> Iterator[None]:
     """Processa uma mensagem como uma transação do New Relic que continua o
     trace de quem a publicou (cabeçalhos vindos dos `MessageAttributes`).
-    Sem o agente ativo, só executa o bloco."""
+    `custom_attributes` (ex.: `saga_id`, `order_id`) vão para a transação,
+    para achar no New Relic todos os traces de uma OS. Sem o agente ativo,
+    só executa o bloco."""
     try:
         import newrelic.agent
 
@@ -38,4 +42,7 @@ def consume_trace(name: str, message_attributes: dict[str, str]) -> Iterator[Non
         return
     with newrelic.agent.BackgroundTask(application, name=name, group="Message/SQS"):
         newrelic.agent.accept_distributed_trace_headers(message_attributes, transport_type="Queue")
+        newrelic.agent.add_custom_attributes(
+            [(key, value) for key, value in (custom_attributes or {}).items() if value is not None]
+        )
         yield
